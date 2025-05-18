@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import Navbar from './Navbar';
-import Sidebar from './Sidebar';
+import Navbar from '../components/Navbar';
+import Sidebar from '../components/Sidebar';
 import EditorPanel from './EditorPanel';
-import VibePanel from './VibePanel';
-import PreviewPanel from './PreviewPanel';
-import StatusBar from './StatusBar';
+import VibePanel from '../components/VibePanel';
+import PreviewPanel from '../components/PreviewPanel';
+import StatusBar from '../components/StatusBar';
 import CodePanel from './CodePanel';
 import LayoutPanel from './LayoutPanel';
+import LoaderAndTutorial from '../components/LoaderComponent';
 import renderMarkdown from '../utils/renderMarkdown';
-import generateSummary from '../utils/generateSummary';
 import waveVisualization from '../utils/waveVisualization';
 import * as Tone from 'tone';
 import _ from 'lodash';
+import { fetchGeminiSummary } from '../services/docsummary';
 
 export default function MarkdownEditor() {
   const [markdown, setMarkdown] = useState("# Welcome to VibeNote\n\nStart writing your *markdown* here!\n\n## Features\n\n- **Live Preview**: See your changes instantly\n- **Syntax Highlighting**: Makes your code look great\n- **Live Vibing**: Dynamic background that reacts to your writing pace\n- **Match Vibe**: Music that adapts to your writing style\n- **Summary Dropdown**: Press Alt+S to see a summary of your document\n- **Download**: Save your document as PDF or Markdown\n\n```javascript\n// Sample code\nfunction hello() {\n  console.log('Hello world!');\n}\n```\n\nTry typing quickly to increase the music tempo and intensity!");
@@ -19,7 +20,9 @@ export default function MarkdownEditor() {
   const [vibeIntensity, setVibeIntensity] = useState(0);
   const [showSummary, setShowSummary] = useState(false);
   const [summary, setSummary] = useState("");
-  const [selectedSection, setSelectedSection] = useState("vibe");
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryInput, setSummaryInput] = useState('');
+  const [selectedSection, setSelectedSection] = useState("editor");
   const [highlightedText, setHighlightedText] = useState("");
   const [isProcessingDownload, setIsProcessingDownload] = useState(false);
   const lastEditTime = useRef(Date.now());
@@ -40,6 +43,47 @@ export default function MarkdownEditor() {
   const effectsRef = useRef({});
   const sequencerRef = useRef(null);
 
+  // Add loading state for the application
+  const [appIsInitializing, setAppIsInitializing] = useState(true);
+
+  // Tutorial state
+  const tutorialSteps = [
+    {
+      title: "Welcome to VibeNote!",
+      description: "Get ready to enhance your writing experience with music and vibes.",
+      position: { top: '30%', left: '50%', transform: 'translate(-50%, -50%)' }
+    },
+    {
+      title: "Write with Vibes",
+      description: "Your background changes based on your typing speed and rhythm.",
+      position: { top: '40%', left: '30%', transform: 'translate(-50%, -50%)' }
+    },
+    {
+      title: "Enable Music",
+      description: "Press Alt+M to toggle music that matches your writing pace.",
+      position: { top: '10%', right: '20%', transform: 'translate(0, 0)' }
+    },
+    {
+      title: "Markdown Preview",
+      description: "See your formatted text in real-time as you type.",
+      position: { top: '40%', right: '20%', transform: 'translate(0, 0)' }
+    },
+    {
+      title: "Quick Summary",
+      description: "Press Alt+S to generate a summary of your document.",
+      position: { top: '20%', left: '20%', transform: 'translate(0, 0)' }
+    }
+  ];
+
+  const [showTutorial, setShowTutorial] = useState(() => {
+  // Only show if not completed before
+  return !localStorage.getItem('vibenote_tutorial_complete');
+});
+  const [tutorialCurrentStep, setTutorialCurrentStep] = useState(0);
+  const [tutorialStepStatus, setTutorialStepStatus] = useState(
+    Array(tutorialSteps.length).fill('pending')
+  );
+
   // Initialize Tone.js
   useEffect(() => {
     synthRef.current = new Tone.PolySynth().toDestination();
@@ -54,8 +98,14 @@ export default function MarkdownEditor() {
     synthRef.current.connect(effectsRef.current.delay);
     synthRef.current.volume.value = Tone.gainToDb(volume);
 
+    // Simulate app initialization time
+    const initTimer = setTimeout(() => {
+      setAppIsInitializing(false);
+    }, 2500);
+
     // Clean up
     return () => {
+      clearTimeout(initTimer);
       if (synthRef.current) synthRef.current.dispose();
       if (sequencerRef.current) sequencerRef.current.dispose();
       Object.values(effectsRef.current).forEach(effect => {
@@ -166,14 +216,36 @@ export default function MarkdownEditor() {
     URL.revokeObjectURL(url);
   };
 
+  // FIXED: Improved generateSummary function 
+  const generateSummary = async () => {
+    if (!markdown || markdown.trim().length < 10) {
+      setSummary("Text is too short to summarize.");
+      setSummaryLoading(false);
+      return;
+    }
+    
+    try {
+      setSummaryLoading(true);
+      const result = await fetchGeminiSummary(markdown);
+      console.log('Summary result:', result);
+      setSummary(result);
+      console.log('Summary generated:', result);
+    } catch (err) {
+      console.error('Summary generation failed:', err);
+      setSummary('Failed to generate summary: ' + err.message);
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.altKey && e.key === 's') {
         e.preventDefault();
-        const newSummary = generateSummary(markdown);
-        setSummary(newSummary);
         setShowSummary(true);
+        // Use the dedicated function to generate summary
+        generateSummary();
       }
       if (e.altKey && e.key === 't') {
         e.preventDefault();
@@ -208,6 +280,35 @@ export default function MarkdownEditor() {
     }
   }, [theme]);
 
+  // Tutorial handlers
+  const handleTutorialComplete = () => {
+    setTutorialStepStatus(prev => {
+      const updated = [...prev];
+      updated[tutorialCurrentStep] = 'completed';
+      return updated;
+    });
+    if (tutorialCurrentStep < tutorialSteps.length - 1) {
+      setTutorialCurrentStep(tutorialCurrentStep + 1);
+    } else {
+      setShowTutorial(false);
+      localStorage.setItem('vibenote_tutorial_complete', 'true');
+    }
+  };
+
+  const handleTutorialSkip = () => {
+    setTutorialStepStatus(prev => {
+      const updated = [...prev];
+      updated[tutorialCurrentStep] = 'skipped';
+      return updated;
+    });
+    if (tutorialCurrentStep < tutorialSteps.length - 1) {
+      setTutorialCurrentStep(tutorialCurrentStep + 1);
+    } else {
+      setShowTutorial(false);
+      localStorage.setItem('vibenote_tutorial_complete', 'true');
+    }
+  };
+
   const parallaxStyle = {
     backgroundPosition: `${vibeIntensity * 5}% ${vibeIntensity * 10}%`,
     transition: 'background-position 0.5s ease-out'
@@ -215,19 +316,30 @@ export default function MarkdownEditor() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-200">
+      {/* Loader and Tutorial */}
+      <LoaderAndTutorial
+        isLoading={appIsInitializing}
+        showTutorial={showTutorial}
+        tutorialSteps={tutorialSteps}
+        currentStep={tutorialCurrentStep}
+        stepStatus={tutorialStepStatus}
+        onComplete={handleTutorialComplete}
+        onSkip={handleTutorialSkip}
+      />
+
       <Navbar
-  theme={theme}
-  setTheme={setTheme}
-  toggleMusic={toggleMusic}
-  musicEnabled={musicEnabled}
-  setShowSummary={setShowSummary}
-  setSummary={setSummary}
-  generateSummary={() => generateSummary(markdown)}
-  vibeIntensity={vibeIntensity}
-  downloadMarkdown={downloadMarkdownFile}
-  isProcessingDownload={isProcessingDownload}
-  selectedSection={selectedSection} // <-- add this line
-/>
+        theme={theme}
+        setTheme={setTheme}
+        toggleMusic={toggleMusic}
+        musicEnabled={musicEnabled}
+        setShowSummary={setShowSummary}
+        onSummaryClick={generateSummary}
+        setSummary={setSummary}
+        vibeIntensity={vibeIntensity}
+        downloadMarkdown={downloadMarkdownFile}
+        isProcessingDownload={isProcessingDownload}
+        selectedSection={selectedSection}
+      />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           selectedSection={selectedSection}
@@ -255,7 +367,7 @@ export default function MarkdownEditor() {
                 markdown={markdown}
                 setMarkdown={setMarkdown}
                 vibeIntensity={vibeIntensity}
-                theme={theme}
+                darkMode={theme === 'dark'}
               />
             )}
             {selectedSection === 'code' && (
@@ -292,6 +404,37 @@ export default function MarkdownEditor() {
           )}
         </div>
       </div>
+      {/* FIXED: Improved summary modal with proper styling and better error handling */}
+      {showSummary && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-lg w-full">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Document Summary</h3>
+              <button
+                className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 text-xl"
+                onClick={() => setShowSummary(false)}
+              >
+                ×
+              </button>
+            </div>
+            
+            {summaryLoading ? (
+              <div className="flex items-center justify-center py-4">
+                <div className="w-6 h-6 border-2 border-t-blue-500 border-r-transparent border-b-blue-500 border-l-transparent rounded-full animate-spin"></div>
+                <span className="ml-2">Generating summary...</span>
+              </div>
+            ) : (
+              <div className="prose dark:prose-invert max-w-none">
+                {summary ? (
+                  <p className="text-gray-700 dark:text-gray-300">{summary}</p>
+                ) : (
+                  <p className="text-gray-500 dark:text-gray-400">No summary available.</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       <StatusBar
         markdown={markdown}
         musicEnabled={musicEnabled}

@@ -1,5 +1,5 @@
 import { Routes, Route } from 'react-router-dom';
-import MarkdownEditor from './components/BasePage'
+import MarkdownEditor from './pages/BasePage';
 import './index.css';
 
 function App() {

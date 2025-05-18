@@ -4,6 +4,13 @@
 
 Vibe Note is a versatile Markdown editor designed to enhance your writing experience with personalized audio and visual feedback. It's more than just a text editor; it's an environment that adapts to your rhythm and pace, creating a dynamic and engaging experience.
 
+## For more info on the architecture and design 
+
+- use deepwiki link here to find more information
+
+https://deepwiki.com/Viswesh934/MAI  
+ 
+
 **Key Features:**
 
 * **Live Markdown Preview:** Instantly see your formatted text as you type.

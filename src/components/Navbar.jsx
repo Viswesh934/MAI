@@ -6,12 +6,12 @@ export default function Navbar({
   toggleMusic, 
   musicEnabled, 
   setShowSummary, 
+  onSummaryClick,
   setSummary, 
-  generateSummary, 
   vibeIntensity,
   downloadMarkdown,
   isProcessingDownload,
-  selectedSection // <-- Add this prop
+  selectedSection
 }) {
   // Enhanced theme-specific styling
   const bgColor = theme === 'dark' ? 'bg-gray-800' : 'bg-white';
@@ -24,9 +24,9 @@ export default function Navbar({
     setTheme(theme === 'light' ? 'dark' : 'light');
   };
 
+  // Only show the summary modal, fetching is handled elsewhere
   const handleSummaryClick = () => {
-    const summary = generateSummary();
-    setSummary(summary);
+    onSummaryClick();
     setShowSummary(true);
   };
 
